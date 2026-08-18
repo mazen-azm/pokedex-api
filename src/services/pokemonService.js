@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { z } from 'zod'
 
 /**
  * Everything that decides *what* to answer, with no knowledge of HTTP.
@@ -26,29 +27,45 @@ const ARTWORK =
 export const pokemonCount = pokemon.length
 
 /**
- * Validates `?limit=&offset=` and applies the defaults.
+ * The shape a valid `?limit=&offset=` has.
+ *
+ * Written as a description instead of a series of if-statements. `coerce` is what
+ * turns the string "5" that arrives in a query string into the number 5 — but only
+ * if it really is a number, so "abc" is still rejected rather than becoming NaN.
+ *
+ * The value of a schema over hand-written checks is not this one case, it is the
+ * tenth: adding a field here is one line, and it cannot be forgotten in a branch.
+ */
+const wholeNumber = (name) =>
+  z.coerce
+    .number({ error: `${name} must be a whole number of 0 or more` })
+    .int(`${name} must be a whole number of 0 or more`)
+    .min(0, `${name} must be a whole number of 0 or more`)
+
+const paginationSchema = z.object({
+  limit: wholeNumber('limit').max(MAX_LIMIT, `limit cannot exceed ${MAX_LIMIT}`).default(DEFAULT_LIMIT),
+  offset: wholeNumber('offset').default(0),
+})
+
+/**
+ * Validates and applies defaults.
  *
  * Returns a result object rather than throwing, so the caller decides what a bad
- * value means — here a 400, but a CLI would want something else. Same reasoning
- * as the repository returning Result<T> instead of letting exceptions escape.
+ * value means — here a 400, but a CLI would want something else. Same reasoning as
+ * the Android repository returning Result<T> instead of letting exceptions escape.
  */
-export function parsePagination({ limit, offset } = {}) {
-  const parsed = { limit: DEFAULT_LIMIT, offset: 0 }
+export function parsePagination(query = {}) {
+  const parsed = paginationSchema.safeParse(query)
 
-  for (const [key, raw] of [['limit', limit], ['offset', offset]]) {
-    if (raw === undefined) continue
-    const value = Number(raw)
-    if (!Number.isInteger(value) || value < 0) {
-      return { ok: false, error: 'limit and offset must be whole numbers of 0 or more' }
-    }
-    parsed[key] = value
+  if (!parsed.success) {
+    // zod reports every problem; the first one is enough for a user-facing message.
+    // The message is already written for a person — see the schema above. zod's
+    // defaults ("expected number, received NaN") describe the parser, not the
+    // mistake, so every rule carries its own wording.
+    return { ok: false, error: parsed.error.issues[0].message }
   }
 
-  if (parsed.limit > MAX_LIMIT) {
-    return { ok: false, error: `limit cannot exceed ${MAX_LIMIT}` }
-  }
-
-  return { ok: true, ...parsed }
+  return { ok: true, ...parsed.data }
 }
 
 /**
