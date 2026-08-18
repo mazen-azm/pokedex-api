@@ -2,7 +2,10 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 
-import pokemonRoutes from './routes/pokemon.js'
+import { openDatabase } from './db/database.js'
+import { createPokemonRepository } from './repositories/pokemonRepository.js'
+import { createPokemonRouter } from './routes/pokemon.js'
+import { createPokemonService } from './services/pokemonService.js'
 
 /**
  * The server: what runs on every request, in the order it runs.
@@ -15,6 +18,29 @@ import pokemonRoutes from './routes/pokemon.js'
 const app = express()
 
 const PORT = process.env.PORT ?? 3000
+
+/**
+ * The one place the layers are wired together: database → repository → service →
+ * router. Each link is handed the one below it and knows nothing else, which is
+ * why the tests can build the same chain over an in-memory database.
+ *
+ * Opened once at startup, not per request. SQLite is a file this process holds
+ * open; reopening it on every call would be the cost of a connection with none of
+ * the benefit.
+ */
+const db = openDatabase()
+
+// The database is generated, not committed, so a fresh clone has no file yet. A
+// missing table would otherwise surface as a 500 on the first request, which
+// points nowhere near the cause.
+try {
+  db.prepare('SELECT COUNT(*) FROM pokemon').get()
+} catch {
+  console.error('No data found. Run `npm run seed` to build the database, then start again.')
+  process.exit(1)
+}
+
+const pokemonRoutes = createPokemonRouter(createPokemonService(createPokemonRepository(db)))
 
 /**
  * Security headers. One line, and the browser stops guessing.

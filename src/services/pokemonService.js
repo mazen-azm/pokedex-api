@@ -1,30 +1,26 @@
-import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 
 /**
- * Everything that decides *what* to answer, with no knowledge of HTTP.
+ * Everything that decides *what* to answer, with no knowledge of HTTP and now no
+ * knowledge of storage either.
  *
- * Nothing here touches `req` or `res`, sets a status code, or knows Express
- * exists. That is the whole point: this file is testable without starting a
- * server, the same way the Android app's mapper and repository were testable
- * without an emulator.
+ * Nothing here touches `req` or `res`, and nothing here writes SQL. When the data
+ * moved from a JSON file into SQLite, this is what changed in this file: two
+ * functions stopped reading a module-level array and started asking a repository.
+ * The reshaping below did not change at all, because the contract did not.
  *
- * The route above it stays thin — it reads the request, calls one of these, and
- * turns the result into a status code.
+ * The file used to open with `JSON.parse(readFileSync(...))` at module scope — a
+ * hidden global that every function and every test quietly depended on. Passing
+ * the repository in instead is the same move as the Android ViewModel taking its
+ * repository as a constructor argument: it is what makes the thing testable
+ * against a fake, and it is why the tests can run on an in-memory database.
  */
-
-const pokemon = JSON.parse(
-  readFileSync(new URL('../data/pokemon.json', import.meta.url), 'utf8'),
-)
 
 export const DEFAULT_LIMIT = 20
 export const MAX_LIMIT = 100
 
 const ARTWORK =
   'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork'
-
-/** Total records available. Exposed so tests do not hardcode 30. */
-export const pokemonCount = pokemon.length
 
 /**
  * The shape a valid `?limit=&offset=` has.
@@ -35,6 +31,10 @@ export const pokemonCount = pokemon.length
  *
  * The value of a schema over hand-written checks is not this one case, it is the
  * tenth: adding a field here is one line, and it cannot be forgotten in a branch.
+ *
+ * It guards the database as well as the response. `LIMIT` and `OFFSET` take
+ * whatever number they are given, so MAX_LIMIT is now also what stops one request
+ * asking for a million rows.
  */
 const wholeNumber = (name) =>
   z.coerce
@@ -53,6 +53,9 @@ const paginationSchema = z.object({
  * Returns a result object rather than throwing, so the caller decides what a bad
  * value means — here a 400, but a CLI would want something else. Same reasoning as
  * the Android repository returning Result<T> instead of letting exceptions escape.
+ *
+ * Pure: no data, no database, so it stays a plain export rather than moving into
+ * the factory below.
  */
 export function parsePagination(query = {}) {
   const parsed = paginationSchema.safeParse(query)
@@ -69,42 +72,14 @@ export function parsePagination(query = {}) {
 }
 
 /**
- * One page, in the shape PokemonListResponseDto expects.
- *
- * `url` must end with the id: the Android client extracts it from there rather
- * than making a request per item just to learn it.
- */
-export function listPokemon({ limit, offset, baseUrl }) {
-  const page = pokemon.slice(offset, offset + limit)
-
-  // One place that knows what a page link looks like. next and previous differ
-  // only by their offset, so writing the template twice would mean remembering
-  // to change both if the route ever moves.
-  const pageUrl = (at) => `${baseUrl}/pokemon?limit=${limit}&offset=${at}`
-
-  return {
-    count: pokemon.length,
-    next: offset + limit < pokemon.length ? pageUrl(offset + limit) : null,
-    previous: offset > 0 ? pageUrl(Math.max(0, offset - limit)) : null,
-    results: page.map((p) => ({
-      name: p.name,
-      url: `${baseUrl}/pokemon/${p.id}/`,
-    })),
-  }
-}
-
-/** By id or by name, case-insensitive. Returns null rather than throwing. */
-export function findPokemon(idOrName) {
-  const key = String(idOrName).toLowerCase()
-  return pokemon.find((p) => String(p.id) === key || p.name === key) ?? null
-}
-
-/**
  * The stored record, reshaped into what PokemonDetailDto expects.
  *
  * Height and weight pass through untouched, in decimetres and hectograms. They
  * look wrong and they are correct: that is the contract the client's mapper was
  * written against, and it converts them to metres and kilograms on the far side.
+ *
+ * Byte-identical to the version that read the JSON file, because the repository
+ * hands back the same record shape. That is the week's test, in one function.
  */
 export function toDetailResponse(record, baseUrl) {
   return {
@@ -124,5 +99,46 @@ export function toDetailResponse(record, baseUrl) {
     sprites: {
       other: { 'official-artwork': { front_default: `${ARTWORK}/${record.id}.png` } },
     },
+  }
+}
+
+/** The half that needs data. `repo` is the only way it can reach any. */
+export function createPokemonService(repo) {
+  return {
+    /** Total records available. A query now, not an array length. */
+    count: () => repo.count(),
+
+    /**
+     * One page, in the shape PokemonListResponseDto expects.
+     *
+     * `slice` became LIMIT and OFFSET; `pokemon.length` became COUNT(*). The
+     * count is a second query rather than something derived from the page,
+     * because the page cannot know how many rows it did not return.
+     *
+     * `url` must end with the id: the Android client extracts it from there
+     * rather than making a request per item just to learn it.
+     */
+    listPokemon: ({ limit, offset, baseUrl }) => {
+      const total = repo.count()
+      const page = repo.page({ limit, offset })
+
+      // One place that knows what a page link looks like. next and previous differ
+      // only by their offset, so writing the template twice would mean remembering
+      // to change both if the route ever moves.
+      const pageUrl = (at) => `${baseUrl}/pokemon?limit=${limit}&offset=${at}`
+
+      return {
+        count: total,
+        next: offset + limit < total ? pageUrl(offset + limit) : null,
+        previous: offset > 0 ? pageUrl(Math.max(0, offset - limit)) : null,
+        results: page.map((p) => ({
+          name: p.name,
+          url: `${baseUrl}/pokemon/${p.id}/`,
+        })),
+      }
+    },
+
+    /** By id or by name, case-insensitive. Returns null rather than throwing. */
+    findPokemon: (idOrName) => repo.findByIdOrName(idOrName),
   }
 }

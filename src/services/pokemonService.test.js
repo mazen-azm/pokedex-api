@@ -1,24 +1,36 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { openDatabase } from '../db/database.js'
+import { seed } from '../db/seed.js'
+import { createPokemonRepository } from '../repositories/pokemonRepository.js'
 import {
   DEFAULT_LIMIT,
   MAX_LIMIT,
-  findPokemon,
-  listPokemon,
+  createPokemonService,
   parsePagination,
-  pokemonCount,
   toDetailResponse,
 } from './pokemonService.js'
 
 /**
  * Runs with Node's built-in test runner — `npm test`. No test framework
- * installed, no server started, no network.
+ * installed, no server started, no network, and now no database file either:
+ * ':memory:' is a real SQLite database that never touches the disk.
  *
  * These mirror the Android project's PokemonMapperTest: the reshaping is where
  * silent bugs live, because a wrong unit or a mis-ordered type produces a screen
  * that looks completely normal and is wrong.
+ *
+ * Every assertion below is the one that was here when the data came from a JSON
+ * file. Only the three lines of setup are new — which is the point of the week.
  */
+
+const db = openDatabase(':memory:')
+seed(db)
+const service = createPokemonService(createPokemonRepository(db))
+
+const pokemonCount = service.count()
+const { findPokemon, listPokemon } = service
 
 const BASE = 'http://localhost:3000/api'
 
