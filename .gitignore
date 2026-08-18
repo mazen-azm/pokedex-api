@@ -6,3 +6,6 @@ node_modules/
 # Local planning notes — every root .md except the README
 /*.md
 !/README.md
+
+# Generated from src/data/pokemon.json by `npm run seed`
+*.db
