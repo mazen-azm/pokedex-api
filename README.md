@@ -79,9 +79,9 @@ The list endpoint returns a name and a url and nothing else — no image, no typ
 stats. That is why the client still makes one request per Pokémon after fetching a
 page. I could return everything in one response and cut 21 requests to 1.
 
-I have not, yet. Keeping the contract identical is what made this week's client change
-a single line. Changing it is a real improvement and a real decision, and it belongs in
-a week where the client work is planned rather than smuggled in here.
+I have not. Keeping the contract identical is what made the client change a single
+line. Changing it would mean changing the client too, so it is a decision to make
+deliberately rather than a tidy-up to slip in here.
 
 ---
 
@@ -113,11 +113,3 @@ src/
 ├── routes/pokemon.js   the endpoints, and the reshaping into PokéAPI's format
 └── data/pokemon.json   30 Pokémon — the storage shape
 ```
-
----
-
-## Coming in week 4
-
-The JSON file becomes a SQLite database. The test is that **the Android client needs no
-change at all** when it does — the same architectural check as week 2, run again a
-layer further down.
