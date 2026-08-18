@@ -1,0 +1,17 @@
+{
+  "name": "pokedex-api",
+  "version": "1.0.0",
+  "description": "A small Pokédex API — AZM Squad week 3",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
