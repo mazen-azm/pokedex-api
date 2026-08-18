@@ -60,16 +60,15 @@ export function parsePagination({ limit, offset } = {}) {
 export function listPokemon({ limit, offset, baseUrl }) {
   const page = pokemon.slice(offset, offset + limit)
 
+  // One place that knows what a page link looks like. next and previous differ
+  // only by their offset, so writing the template twice would mean remembering
+  // to change both if the route ever moves.
+  const pageUrl = (at) => `${baseUrl}/pokemon?limit=${limit}&offset=${at}`
+
   return {
     count: pokemon.length,
-    next:
-      offset + limit < pokemon.length
-        ? `${baseUrl}/pokemon?limit=${limit}&offset=${offset + limit}`
-        : null,
-    previous:
-      offset > 0
-        ? `${baseUrl}/pokemon?limit=${limit}&offset=${Math.max(0, offset - limit)}`
-        : null,
+    next: offset + limit < pokemon.length ? pageUrl(offset + limit) : null,
+    previous: offset > 0 ? pageUrl(Math.max(0, offset - limit)) : null,
     results: page.map((p) => ({
       name: p.name,
       url: `${baseUrl}/pokemon/${p.id}/`,
