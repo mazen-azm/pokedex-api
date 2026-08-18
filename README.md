@@ -7,6 +7,18 @@ I am a Senior Flutter developer. Weeks 1–2 were the client — Kotlin and Jetp
 Compose, consuming an API. This week is the other side of the same wire: writing the
 thing that answers.
 
+## The Android client, running on this API
+
+| List | Detail |
+|---|---|
+| <img src="docs/screenshots/android-list-from-this-api.png" width="240"> | <img src="docs/screenshots/android-detail-from-this-api.png" width="240"> |
+
+Every row on those screens came from this server. Charizard reads 1.7 m and 90.5 kg
+because the API sends 17 decimetres and 905 hectograms and the client converts them —
+the units are the contract, not an oversight.
+
+Client repo: [MyFirstNativeApp](https://github.com/mazen-azm/MyFirstNativeApp)
+
 ---
 
 ## Running it
